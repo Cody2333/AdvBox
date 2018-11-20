@@ -11,3 +11,6 @@ build
 thirdparty
 conf/*.conf
 conf/*.ini
+tutorials/mnist*
+
+.vscode
