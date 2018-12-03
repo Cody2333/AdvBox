@@ -24,7 +24,7 @@ import logging
 
 import sys
 sys.path.append("..")
-
+import numpy as np
 import torch
 import torchvision
 from torchvision import datasets, transforms
@@ -37,12 +37,22 @@ from advbox.attacks.gradient_method import FGSM
 from advbox.models.pytorch import PytorchModel
 from tutorials.mnist_model_pytorch import Net
 
+class MyLoss(torch.nn.Module):
+    def __init__(self):
+        super(MyLoss, self).__init__()
+        print '1'
+    def forward(self, pred, truth):
+        print type(pred)
+        addon = torch.sum(torch.abs(torch.argmin(pred) - truth).float())
 
+        print torch.nn.CrossEntropyLoss()(pred, truth)
+        print addon
+        return addon
 def main():
     """
     Advbox demo which demonstrate how to use advbox.
     """
-    TOTAL_NUM = 500
+    TOTAL_NUM = 2
     pretrained_model="./mnist-pytorch/net.pth"
 
 
@@ -52,7 +62,7 @@ def main():
         datasets.MNIST('./mnist-pytorch/data', train=False, download=True, transform=transforms.Compose([
             transforms.ToTensor(),
         ])),
-        batch_size=1, shuffle=True)
+        batch_size=1, shuffle=False)
 
     # Define what device we are using
     logging.info("CUDA Available: {}".format(torch.cuda.is_available()))
@@ -73,7 +83,7 @@ def main():
         channel_axis=1)
     attack = FGSM(m)
 
-    attack_config = {"epsilons": 0.3}
+    attack_config = {"epsilons": 0.2, "epsilon_steps": 1, "epsilons_max": 0.2, "norm_ord": 1, "steps": 10}
 
 
     # use test data to generate adversarial examples

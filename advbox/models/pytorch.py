@@ -30,6 +30,7 @@ import torchvision
 from torch.autograd import Variable
 import torch.nn as nn
 
+
 #直接加载pb文件
 class PytorchModel(Model):
 
@@ -146,7 +147,11 @@ class PytorchModel(Model):
         """
 
         import torch
-
+        cov = np.load('../cov.cifar.npy')
+        covI = np.linalg.inv(cov)
+        u = np.load('../u.cifar.npy')
+        covI = torch.from_numpy(covI).float().to(self._device)
+        u = torch.from_numpy(u).float().to(self._device)
         scaled_data = self._process_input(data)
 
         #logging.info(scaled_data)
@@ -159,20 +164,34 @@ class PytorchModel(Model):
         #label = torch.Tensor(label).to(self._device)
 
         output=self.predict_tensor(scaled_data).to(self._device)
+        loss=-self._loss(output, label)
 
-        #loss=self._loss(output, label)
-        ce = nn.CrossEntropyLoss()
-        loss=-ce(output, label)
+        # 计算马氏距离
+        tt=scaled_data.reshape(32*32*3).float()
+        mat = (tt-u).reshape(32*32*3, 1)
+        loss2=torch.sqrt(mat.t().float().mm(covI.float()).mm(mat.float()).float()).reshape(1)[0]
+        # loss = loss + loss2 * 0.0001
+        # ce = nn.CrossEntropyLoss()
+        # loss=-ce(output, label)
 
         #计算梯度
         # Zero all existing gradients
         self._model.zero_grad()
         loss.backward()
-
+        grad1 = scaled_data.grad.cpu().numpy().copy()
+        grad1 = torch.from_numpy(grad1)
+        sum1 = torch.sum(torch.abs(scaled_data.grad))
+        self._model.zero_grad()
+        loss2.backward()
+        grad2 = scaled_data.grad.cpu().numpy().copy()
+        grad2 = torch.from_numpy(grad2)
+        sum2 = torch.sum(torch.abs(scaled_data.grad))
+        # print(sum1,sum2)
+        # print(grad1, grad2)
+        grad = grad1 * 1 + sum1 /sum2 * grad2 * 100 # 负数为拉近距离，正数为拉远距离
+        print(torch.mean(grad2))
         #技巧 梯度也是tensor 需要转换成np
-        grad = scaled_data.grad.cpu().numpy().copy()
-
-
+        grad = grad.cpu().numpy().copy()
         return grad.reshape(scaled_data.shape)
 
     def predict_name(self):
