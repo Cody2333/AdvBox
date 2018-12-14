@@ -134,7 +134,7 @@ class PytorchModel(Model):
 
         return self._nb_classes
 
-    def gradient(self, data, label):
+    def gradient(self, data, label, original):
         """
         Calculate the gradient of the cross-entropy loss w.r.t the image.
         Args:
@@ -147,6 +147,7 @@ class PytorchModel(Model):
         """
 
         import torch
+        origin_img = np.copy(original)
         cov = np.load('../cov.cifar.npy')
         covI = np.linalg.inv(cov)
         u = np.load('../u.cifar.npy')
@@ -154,7 +155,6 @@ class PytorchModel(Model):
         u = torch.from_numpy(u).float().to(self._device)
         scaled_data = self._process_input(data)
 
-        #logging.info(scaled_data)
 
         scaled_data = torch.from_numpy(scaled_data).to(self._device)
         scaled_data.requires_grad = True
@@ -167,8 +167,9 @@ class PytorchModel(Model):
         loss=-self._loss(output, label)
 
         # 计算马氏距离
-        tt=scaled_data.reshape(32*32*3).float()
-        mat = (tt-u).reshape(32*32*3, 1)
+        A=scaled_data.reshape(32*32*3).float()
+        B=torch.from_numpy(origin_img.reshape(32*32*3)).float().to(self._device)
+        mat = (A-B).reshape(32*32*3, 1)
         loss2=torch.sqrt(mat.t().float().mm(covI.float()).mm(mat.float()).float()).reshape(1)[0]
         # loss = loss + loss2 * 0.0001
         # ce = nn.CrossEntropyLoss()
@@ -184,14 +185,17 @@ class PytorchModel(Model):
         self._model.zero_grad()
         loss2.backward()
         grad2 = scaled_data.grad.cpu().numpy().copy()
+        grad2 = np.nan_to_num(grad2, 0)
         grad2 = torch.from_numpy(grad2)
         sum2 = torch.sum(torch.abs(scaled_data.grad))
-        # print(sum1,sum2)
-        # print(grad1, grad2)
-        grad = grad1 * 1 + sum1 /sum2 * grad2 * 100 # 负数为拉近距离，正数为拉远距离
-        print(torch.mean(grad2))
+        if (np.isnan(sum2.numpy())):
+            grad = grad1
+        else:
+            grad = grad1 * 1 + sum1 / sum2 * grad2 * 100 # 负数为拉远距离，正数为拉近距离
+        print(loss)
         #技巧 梯度也是tensor 需要转换成np
         grad = grad.cpu().numpy().copy()
+
         return grad.reshape(scaled_data.shape)
 
     def predict_name(self):

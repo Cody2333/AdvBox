@@ -1,3 +1,4 @@
+#coding=utf-8
 # Copyright 2017 - 2018 Baidu Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,34 +34,42 @@ import torch.utils.data.dataloader as Data
 
 
 from advbox.adversary import Adversary
-from advbox.attacks.gradient_method import FGSM
-from advbox.models.pytorchcifar import PytorchModel
-from tutorials.cifar_model_pytorch import Net
+from advbox.attacks.gradient_method import FGSM, BIM
+from advbox.models.pytorchmnist import PytorchModel
+from tutorials.mnist_model_pytorch import Net
 
 def mahalanobis_dist(x,y):
-    cov = np.load('../cov.cifar.npy')
-    covI = np.linalg.inv(cov)
-    A=x.reshape(32*32*3)
-    B=y.reshape(32*32*3)
+    cov = np.load('../cov.data.npy')
+    # 奇异矩阵的情况需要加上一个小的对角矩阵以便计算逆矩阵
+    cov_abs = np.abs(cov)
+    cov_abs[cov_abs == 0] = 10000
+    min = np.min(cov_abs)
+    append_matrix = np.eye(28*28) * min * 0.00001
+    print('aa',append_matrix[0][0])
+    covI = np.linalg.pinv(cov)
+
+    A=x.reshape(28*28)
+    B=y.reshape(28*28)
+
     return np.sqrt((A-B).dot(covI).dot((A-B).T))
 
 def eu_dist(x,y):
-    A=x.reshape(32*32*3)
-    B=y.reshape(32*32*3)
+    A=x.reshape(28*28)
+    B=y.reshape(28*28)
     return np.linalg.norm(A - B)
 
 def main():
     """
     Advbox demo which demonstrate how to use advbox.
     """
-    TOTAL_NUM = 100
-    pretrained_model="./cifar-pytorch/net.pth"
+    TOTAL_NUM = 5
+    pretrained_model="./mnist-pytorch/net.pth"
 
 
     loss_func = torch.nn.CrossEntropyLoss()
 
     test_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10('./cifar-pytorch/data', train=False, download=True, transform=transforms.Compose([
+        datasets.MNIST('./mnist-pytorch/data', train=False, download=True, transform=transforms.Compose([
             transforms.ToTensor(),
         ])),
         batch_size=1, shuffle=False)
@@ -82,16 +91,14 @@ def main():
     m = PytorchModel(
         model, loss_func,(0, 1),
         channel_axis=1)
-    attack = FGSM(m)
+    attack = BIM(m)
 
-    attack_config = {"epsilons": 0.005, "epsilon_steps": 1, "epsilons_max": 0.005, "norm_ord": 1, "steps": 10}
+    attack_config = {"epsilons": 0.05, "epsilon_steps": 1, "epsilons_max": 0.05, "norm_ord": 1, "steps": 10}
 
 
     # use test data to generate adversarial examples
     total_count = 0
     fooling_count = 0
-    m_dists = []
-    e_dists = []
     for i, data in enumerate(test_loader):
         inputs, labels = data
 
@@ -106,16 +113,18 @@ def main():
 
         # FGSM non-targeted attack
         adversary = attack(adversary, **attack_config)
-
+        print(adversary.original.shape)
+        pertubation = adversary.perturbation()  # (1,1,28,28)
+        m_dist = mahalanobis_dist(adversary.original, adversary.adversarial_example)
+        e_dist = eu_dist(adversary.original, adversary.adversarial_example)
+        print('###')
+        print(m_dist)
+        print(e_dist)
         if adversary.is_successful():
             fooling_count += 1
             print(
                 'attack success, original_label=%d, adversarial_label=%d, count=%d'
                 % (labels, adversary.adversarial_label, total_count))
-            m_dist = mahalanobis_dist(adversary.original, adversary.adversarial_example)
-            e_dist = eu_dist(adversary.original, adversary.adversarial_example)
-            m_dists = m_dists + [m_dist]
-            e_dists = e_dists + [e_dist]
 
         else:
             print('attack failed, original_label=%d, count=%d' %
@@ -126,8 +135,6 @@ def main():
                 "[TEST_DATASET]: fooling_count=%d, total_count=%d, fooling_rate=%f"
                 % (fooling_count, total_count,
                    float(fooling_count) / total_count))
-            print("mahalanobis_dist:", np.mean(m_dists))
-            print("eu_dist", np.mean(e_dists))
             break
     print("fgsm attack done")
 

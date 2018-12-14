@@ -105,7 +105,7 @@ class Model(object):
         raise NotImplementedError
 
     @abstractmethod
-    def gradient(self, data, label):
+    def gradient(self, data, label, original):
         """
         Calculate the gradient of the cross-entropy loss w.r.t the image.
 

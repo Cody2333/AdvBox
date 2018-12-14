@@ -105,15 +105,16 @@ class GradientMethodAttack(Attack):
             step = 1
             #强制拷贝 避免针对adv_img的修改也影响adversary.original
             adv_img = np.copy(adversary.original)
+            original = np.copy(adversary.original)
             if epsilon == 0.0:
                 continue
             for i in range(steps):
                 if adversary.is_targeted_attack:
                     gradient = +self.model.gradient(adv_img,
-                                                    adversary.target_label)
+                                                    adversary.target_label, original)
                 else:
                     gradient = -self.model.gradient(adv_img,
-                                                   adversary.original_label)
+                                                   adversary.original_label, original)
                 if norm_ord == np.inf:
                     gradient_norm = np.sign(gradient)
                 else:
@@ -193,7 +194,7 @@ class IterativeLeastLikelyClassMethodAttack(GradientMethodAttack):
     Paper link: https://arxiv.org/abs/1607.02533
     """
 
-    def _apply(self, adversary, epsilons=0.01, epsilons_max=0.5,steps=1000,epsilon_steps=1000):
+    def _apply(self, adversary, epsilons=0.01, epsilons_max=0.5,steps=1000,epsilon_steps=1000, norm_ord=np.inf):
         return GradientMethodAttack._apply(
             self,
             adversary=adversary,

@@ -12,3 +12,4 @@ thirdparty
 conf/*.conf
 conf/*.ini
 tutorials/*-pytorch
+src/*-pytorch
