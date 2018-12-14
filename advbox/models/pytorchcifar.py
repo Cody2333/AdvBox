@@ -84,7 +84,7 @@ class PytorchModel(Model):
 
         # Run prediction
         predict = self._model(scaled_data)
-        predict = np.squeeze(predict, axis=0)
+        predict = torch.squeeze(predict)
 
         predict=predict.detach()
 
@@ -180,15 +180,15 @@ class PytorchModel(Model):
         self._model.zero_grad()
         loss.backward()
         grad1 = scaled_data.grad.cpu().numpy().copy()
-        grad1 = torch.from_numpy(grad1)
-        sum1 = torch.sum(torch.abs(scaled_data.grad))
+        grad1 = torch.from_numpy(grad1).to(self._device)
+        sum1 = torch.sum(torch.abs(scaled_data.grad)).to(self._device)
         self._model.zero_grad()
         loss2.backward()
         grad2 = scaled_data.grad.cpu().numpy().copy()
         grad2 = np.nan_to_num(grad2, 0)
-        grad2 = torch.from_numpy(grad2)
-        sum2 = torch.sum(torch.abs(scaled_data.grad))
-        if (np.isnan(sum2.numpy())):
+        grad2 = torch.from_numpy(grad2).to(self._device)
+        sum2 = torch.sum(torch.abs(scaled_data.grad)).to(self._device)
+        if (np.isnan(sum2.cpu().numpy().copy())):
             grad = grad1
         else:
             grad = grad1 * 1 + sum1 / sum2 * grad2 * 100 # 负数为拉远距离，正数为拉近距离
