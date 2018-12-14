@@ -40,7 +40,8 @@ class PytorchModel(Model):
                  loss,
                  bounds,
                  channel_axis=3,
-                 preprocess=None):
+                 preprocess=None,
+                 grad_conf=1):
 
         import torch
 
@@ -50,7 +51,8 @@ class PytorchModel(Model):
 
         super(PytorchModel, self).__init__(
             bounds=bounds, channel_axis=channel_axis, preprocess=preprocess)
-
+            
+        self._grad_conf = grad_conf
 
         self._model = model
 
@@ -150,18 +152,14 @@ class PytorchModel(Model):
         origin_img = np.copy(original)
         cov = np.load('../cov.cifar.npy')
         covI = np.linalg.inv(cov)
-        u = np.load('../u.cifar.npy')
         covI = torch.from_numpy(covI).float().to(self._device)
-        u = torch.from_numpy(u).float().to(self._device)
         scaled_data = self._process_input(data)
-
 
         scaled_data = torch.from_numpy(scaled_data).to(self._device)
         scaled_data.requires_grad = True
 
         label = np.array([label])
         label = torch.from_numpy(label).to(self._device)
-        #label = torch.Tensor(label).to(self._device)
 
         output=self.predict_tensor(scaled_data).to(self._device)
         loss=-self._loss(output, label)
@@ -191,8 +189,8 @@ class PytorchModel(Model):
         if (np.isnan(sum2.cpu().numpy().copy())):
             grad = grad1
         else:
-            grad = grad1 * 1 + sum1 / sum2 * grad2 * 100 # 负数为拉远距离，正数为拉近距离
-        print(loss)
+            grad = grad1 * 1 + sum1 / sum2 * grad2 * self._grad_conf # 参数，默认为1，负数为拉远距离，正数为拉近距离
+        # print(loss)
         #技巧 梯度也是tensor 需要转换成np
         grad = grad.cpu().numpy().copy()
 

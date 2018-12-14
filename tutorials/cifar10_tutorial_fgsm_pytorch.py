@@ -53,7 +53,7 @@ def main():
     """
     Advbox demo which demonstrate how to use advbox.
     """
-    TOTAL_NUM = 100
+    TOTAL_NUM = 10
     pretrained_model="./cifar-pytorch/net.pth"
 
 
@@ -78,59 +78,61 @@ def main():
     # Set the model in evaluation mode. In this case this is for the Dropout layers
     model.eval()
 
-    # advbox demo
-    m = PytorchModel(
-        model, loss_func,(0, 1),
-        channel_axis=1)
-    attack = FGSM(m)
+    attack_config = {"epsilons": 0.005, "epsilon_steps": 40, "epsilons_max": 0.2, "norm_ord": 1, "steps": 100}
+    print(attack_config)
+    for idx in [-10,-5,-2,-1,0,1,2,5,10]:
+        print('grad_conf:', idx)
 
-    attack_config = {"epsilons": 0.005, "epsilon_steps": 1, "epsilons_max": 0.005, "norm_ord": 1, "steps": 10}
+        # advbox demo
+        m = PytorchModel(
+            model, loss_func,(0, 1),
+            channel_axis=1, grad_conf=idx)
+        attack = FGSM(m)
 
+        # use test data to generate adversarial examples
+        total_count = 0
+        fooling_count = 0
+        m_dists = []
+        e_dists = []
+        for i, data in enumerate(test_loader):
+            inputs, labels = data
 
-    # use test data to generate adversarial examples
-    total_count = 0
-    fooling_count = 0
-    m_dists = []
-    e_dists = []
-    for i, data in enumerate(test_loader):
-        inputs, labels = data
+            #inputs, labels = inputs.to(device), labels.to(device)
+            inputs, labels=inputs.numpy(),labels.numpy()
 
-        #inputs, labels = inputs.to(device), labels.to(device)
-        inputs, labels=inputs.numpy(),labels.numpy()
+            #inputs.requires_grad = True
+            #print(inputs.shape)
 
-        #inputs.requires_grad = True
-        #print(inputs.shape)
+            total_count += 1
+            adversary = Adversary(inputs, labels[0])
 
-        total_count += 1
-        adversary = Adversary(inputs, labels[0])
+            # FGSM non-targeted attack
+            adversary = attack(adversary, **attack_config)
 
-        # FGSM non-targeted attack
-        adversary = attack(adversary, **attack_config)
+            if adversary.is_successful():
+                fooling_count += 1
+                # print(
+                #     'attack success, original_label=%d, adversarial_label=%d, count=%d'
+                #     % (labels, adversary.adversarial_label, total_count))
+                m_dist = mahalanobis_dist(adversary.original, adversary.adversarial_example)
+                e_dist = eu_dist(adversary.original, adversary.adversarial_example)
+                m_dists = m_dists + [m_dist]
+                e_dists = e_dists + [e_dist]
 
-        if adversary.is_successful():
-            fooling_count += 1
-            print(
-                'attack success, original_label=%d, adversarial_label=%d, count=%d'
-                % (labels, adversary.adversarial_label, total_count))
-            m_dist = mahalanobis_dist(adversary.original, adversary.adversarial_example)
-            e_dist = eu_dist(adversary.original, adversary.adversarial_example)
-            m_dists = m_dists + [m_dist]
-            e_dists = e_dists + [e_dist]
+            # else:
+            #     print('attack failed, original_label=%d, count=%d' %
+            #         (labels, total_count))
 
-        else:
-            print('attack failed, original_label=%d, count=%d' %
-                  (labels, total_count))
-
-        if total_count >= TOTAL_NUM:
-            print(
-                "[TEST_DATASET]: fooling_count=%d, total_count=%d, fooling_rate=%f"
-                % (fooling_count, total_count,
-                   float(fooling_count) / total_count))
-            print("mahalanobis_dist:", np.mean(m_dists))
-            print("eu_dist", np.mean(e_dists))
-            break
-    print("fgsm attack done")
-
+            if total_count >= TOTAL_NUM:
+                print(
+                    "[TEST_DATASET]: fooling_count=%d, total_count=%d, fooling_rate=%f"
+                    % (fooling_count, total_count,
+                    float(fooling_count) / total_count))
+                print("mahalanobis_dist:", np.mean(m_dists))
+                print("eu_dist", np.mean(e_dists))
+                break
+        print("done")
+    print('all done')
 
 if __name__ == '__main__':
     main()
